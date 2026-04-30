@@ -273,9 +273,14 @@ if user_input:
                         f.write(current_code)
                     pytest_args = [sys.executable, "-m", "pytest", "test_generated_script.py", "-v", "--color=no",
                                    "--tb=short"]
-                    if show_browser: pytest_args.append("--headed")
+
+                    # 🌟 修改这里：只有在非 Linux 环境下，才允许使用 --headed 模式
+                    if show_browser and sys.platform != "linux":
+                        pytest_args.append("--headed")
+
                     result = subprocess.run(pytest_args, capture_output=True, text=True, encoding="utf-8",
                                             errors="replace")
+
                     full_log = (result.stdout + result.stderr).strip()
                     if result.returncode == 0:
                         is_success = True
