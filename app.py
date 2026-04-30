@@ -110,11 +110,6 @@ with st.sidebar:
     show_browser = st.checkbox("运行测试时显示浏览器", value=True)
     max_retries = st.slider("最大自动纠错次数", min_value=1, max_value=5, value=3, step=1)
 
-# 后续代码保持不变...
-# (这里继续你之前的 Prompt 引擎、布局逻辑和核心流转逻辑)
-# ==========================================
-# 1. 大模型 Prompt 核心引擎
-# ==========================================
 # ==========================================
 # 1. 大模型 Prompt 核心引擎
 # ==========================================
@@ -122,18 +117,22 @@ BASE_RULES = """
 【全局绝对规则】：
 1. 必须是一个合法的 pytest 测试文件。测试函数以 `test_` 开头并使用 `page` fixture。
 2. 只输出纯净 Python 代码，不要任何解释。
-3. 【自主推断】：优先使用 page.get_by_placeholder(), get_by_role() 等语义定位器。对于百度，必须直接使用 '#kw'。
-4. 【防坑指南 - 极度重要】：
-   - 绝对禁止使用 `page.wait_for_load_state('networkidle')`！请用 `wait_for_load_state('load')` 代替。
-   - ⚠️【致命规则】：绝对禁止对输入框使用 `.click()` 或 `.fill()`！(在云端无头模式下会报 not visible 错误)。
-   - ⚠️【唯一输入法】：必须且只能用 `page.locator("...").evaluate("el => el.focus()")` 强行无视可见性进行聚焦！
-   - 聚焦后，用 `page.keyboard.type("文本", delay=100)` 模拟物理输入。
-   - 输入完文本后，必须加一句 `page.wait_for_timeout(1000)`，然后再执行 `page.keyboard.press("Enter")`。
-5. 必须包含截图逻辑，保存为 'test_result.png'。
-6. 末尾必须保留自启动逻辑：
-   if __name__ == '__main__':
-       import pytest, sys
-       pytest.main(["-v", "-s", "--headed", __file__])
+3. 【定位器防坑】：绝对禁止使用中文作为 get_by_role 的 name 参数（防止云端英文环境找不到元素）。
+   - 百度必须用 '#kw'，必应必须用 '#sb_form_q'，B站必须用 '.nav-search-input'。
+4. 【操作防坑 - 极度重要】：
+   - 绝对禁止使用 `page.wait_for_load_state('networkidle')`！用 `wait_for_load_state('load')` 代替。
+   - 绝对禁止对输入框使用 `.click()` 或 `.fill()`！
+   - 必须且只能用 `page.locator("...").evaluate("el => el.focus()")` 强行无视可见性进行聚焦！
+   - 聚焦后用 `page.keyboard.type("文本", delay=100)` 输入，然后 `page.wait_for_timeout(1000)`。
+5. 🌟【新标签页防坑（核心）】：如果用户的指令操作（如B站搜索）会弹出一个全新的标签页，你**必须**使用以下上下文语法来捕获新页面，并在新页面上截图：
+   ```python
+   with page.context.expect_page() as new_page_info:
+       page.keyboard.press("Enter") # 触发打开新标签页的动作
+   new_page = new_page_info.value
+   new_page.wait_for_load_state("load")
+   new_page.wait_for_timeout(2000)
+   new_page.screenshot(path='test_result.png', full_page=True)
+   ```
 """
 
 
