@@ -4,3 +4,4 @@ libasound2
 libgtk-3-0
 libgbm-dev
 libgdk-pixbuf-2.0-0
+fonts-wqy-zenhei
