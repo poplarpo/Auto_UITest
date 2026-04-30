@@ -115,14 +115,19 @@ with st.sidebar:
 # ==========================================
 # 1. 大模型 Prompt 核心引擎
 # ==========================================
+# ==========================================
+# 1. 大模型 Prompt 核心引擎
+# ==========================================
 BASE_RULES = """
 【全局绝对规则】：
 1. 必须是一个合法的 pytest 测试文件。测试函数以 `test_` 开头并使用 `page` fixture。
 2. 只输出纯净 Python 代码，不要任何解释。
-3. 【自主推断】：优先使用 page.get_by_placeholder(), get_by_role() 等语义定位器。
-4. 【防坑指南】：
+3. 【自主推断】：优先使用 page.get_by_placeholder(), get_by_role() 等语义定位器。对于百度，必须直接使用 '#kw'。
+4. 【防坑指南 - 极度重要】：
    - 绝对禁止使用 `page.wait_for_load_state('networkidle')`！请用 `wait_for_load_state('load')` 代替。
-   - 必须用 evaluate 强行聚焦后，再用 keyboard.type(text, delay=100) 模拟物理输入！
+   - ⚠️【致命规则】：绝对禁止对输入框使用 `.click()` 或 `.fill()`！(在云端无头模式下会报 not visible 错误)。
+   - ⚠️【唯一输入法】：必须且只能用 `page.locator("...").evaluate("el => el.focus()")` 强行无视可见性进行聚焦！
+   - 聚焦后，用 `page.keyboard.type("文本", delay=100)` 模拟物理输入。
    - 输入完文本后，必须加一句 `page.wait_for_timeout(1000)`，然后再执行 `page.keyboard.press("Enter")`。
 5. 必须包含截图逻辑，保存为 'test_result.png'。
 6. 末尾必须保留自启动逻辑：
