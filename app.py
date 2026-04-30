@@ -257,58 +257,80 @@ if user_input:
             with st.status("🚀 正在执行流水线...", expanded=True) as status:
                 intent = classify_intent(user_input, st.session_state.current_code, client)
                 if intent == "NEW":
+                    status.write("🧠 识别到新任务意图，正在从零生成新脚本...")
                     st.session_state.current_code = None
                     st.session_state.iteration_count = 0
                     st.session_state.base_filename = generate_filename(user_input, client)
                     new_code = generate_initial_code(user_input, client)
                 else:
+                    status.write(f"🧠 正在基于 V{st.session_state.iteration_count} 代码进行增量修改...")
                     new_code = modify_existing_code(st.session_state.current_code, user_input, client)
 
                 current_code = new_code
                 error_feedback = None
                 is_success = False
                 full_log = ""
-                trace_html = "<details><summary>🕵️ 点击查看内部执行过程</summary>\n\n"
+                # 🌟 重新加上追踪日志的头部
+                trace_html = "<details>\n<summary>🕵️ 点击查看内部执行过程</summary>\n\n"
 
                 if os.path.exists("test_result.png"): os.remove("test_result.png")
 
                 for attempt in range(1, max_retries + 1):
-                    if attempt > 1: current_code = heal_failed_code(current_code, error_feedback, client)
+                    trace_html += f"#### 【第 {attempt} 次尝试】\n"
+                    if attempt > 1:
+                        status.write(f"🚑 测试失败，触发自我纠错 (尝试 {attempt}/{max_retries})...")
+                        current_code = heal_failed_code(current_code, error_feedback, client)
+
+                    # 🌟 记录大模型生成的代码
+                    trace_html += "**🤖 AI 生成的代码：**\n```python\n" + current_code + "\n```\n\n"
+
                     with open("test_generated_script.py", "w", encoding="utf-8") as f:
                         f.write(current_code)
+
+                    status.write(f"⚙️ 启动 Pytest 执行测试 (第 {attempt} 次尝试)...")
                     pytest_args = [sys.executable, "-m", "pytest", "test_generated_script.py", "-v", "--color=no",
                                    "--tb=short"]
 
-                    # 🌟 修改这里：只有在非 Linux 环境下，才允许使用 --headed 模式
+                    # 🌟 包含之前的 Linux 环境防崩溃逻辑
                     if show_browser and sys.platform != "linux":
                         pytest_args.append("--headed")
 
                     result = subprocess.run(pytest_args, capture_output=True, text=True, encoding="utf-8",
                                             errors="replace")
-
                     full_log = (result.stdout + result.stderr).strip()
+
                     if result.returncode == 0:
                         is_success = True
+                        trace_html += "**✅ 测试执行通过！**\n\n---\n\n"
                         break
                     else:
                         error_feedback = full_log
+                        # 🌟 记录报错日志
+                        trace_html += "**❌ 执行崩溃：**\n```bash\n" + full_log + "\n```\n\n---\n\n"
+
+                # 🌟 封闭折叠面板
+                trace_html += "</details>"
 
                 st.session_state.run_logs = full_log
                 if is_success:
                     st.session_state.last_status = "success"
                     st.session_state.iteration_count += 1
                     st.session_state.current_code = current_code
-                    save_dir = "successful_tests";
+                    save_dir = "successful_tests"
                     os.makedirs(save_dir, exist_ok=True)
                     timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
                     saved_file_name = f"{st.session_state.base_filename}_v{st.session_state.iteration_count}_{timestamp}.py"
                     with open(os.path.join(save_dir, saved_file_name), "w", encoding="utf-8") as f_save:
                         f_save.write(current_code)
-                    response_text = f"✅ 执行成功！代码已更新至 **V{st.session_state.iteration_count}**。"
+                    status.update(label="✅ 测试通过", state="complete", expanded=False)
+                    response_text = f"✅ 执行成功！请在右侧查看截图。代码已归档: `{saved_file_name}`"
                 else:
                     st.session_state.last_status = "error"
-                    response_text = "❌ 执行失败。"
+                    status.update(label="❌ 执行失败", state="error", expanded=True)
+                    response_text = "❌ 执行失败，请查看内部日志。"
 
-                st.markdown(response_text)
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                # 🌟 核心修复：把 trace_html 完美拼接到最终回复里！
+                full_response = response_text + "\n\n" + trace_html
+                st.markdown(full_response, unsafe_allow_html=True)
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
     st.rerun()
